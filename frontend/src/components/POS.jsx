@@ -126,7 +126,7 @@ export default function POS() {
     if (cart.length === 0) { toast.error('Cart is empty'); return; }
     const mockOrderNum = Math.floor(1000 + Math.random() * 9000);
     const mockOrder = { order_number: mockOrderNum, total };
-    
+
     setPayModal({ order: mockOrder, verified: false });
 
     // Mock payment verification simulation after 3 seconds
@@ -335,7 +335,7 @@ export default function POS() {
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full text-center" onClick={(e) => e.stopPropagation()}>
             <h3 className="font-bold text-lg mb-1">Scan to pay (ABA KHQR)</h3>
             <p className="text-sm text-gray-500 mb-4">Order #{payModal.order.order_number} · ${payModal.order.total.toFixed(2)}</p>
-            
+
             <div className="w-56 h-56 mx-auto rounded-xl border p-4 bg-slate-50 flex flex-col items-center justify-center">
               <div className="w-32 h-32 bg-slate-200 rounded-lg flex items-center justify-center text-slate-400 text-xs font-mono border border-dashed border-slate-400">
                 [KHQR QR Code]

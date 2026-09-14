@@ -90,11 +90,10 @@ export default function Reports() {
                 <button
                   key={p}
                   onClick={() => setPeriod(p)}
-                  className={`px-3 py-1.5 rounded-md text-xs font-semibold capitalize ${
-                    period === p
-                      ? 'bg-indigo-600 text-white'
-                      : 'text-gray-600 hover:bg-gray-50'
-                  }`}
+                  className={`px-3 py-1.5 rounded-md text-xs font-semibold capitalize ${period === p
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-gray-600 hover:bg-gray-50'
+                    }`}
                 >
                   {p}
                 </button>
@@ -115,11 +114,10 @@ export default function Reports() {
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold ${
-              tab === t.key
-                ? 'bg-indigo-600 text-white'
-                : 'bg-white text-gray-600 border hover:bg-gray-50'
-            }`}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold ${tab === t.key
+              ? 'bg-indigo-600 text-white'
+              : 'bg-white text-gray-600 border hover:bg-gray-50'
+              }`}
           >
             {t.label}
           </button>
