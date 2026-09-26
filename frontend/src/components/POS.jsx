@@ -1,362 +1,311 @@
-import React, { useMemo, useRef, useState } from 'react';
-import toast from 'react-hot-toast';
-import { FiCreditCard, FiMinus, FiPlus, FiSearch, FiShoppingCart, FiTrash2, FiX } from 'react-icons/fi';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 
-// Mock Product Catalog Data
-const INITIAL_PRODUCTS = [
-  {
-    id: 101,
-    name: 'iPhone 15 Pro Max',
-    price: 1199.00,
-    sale_price: 1149.00,
-    quantity: 10,
-    images: ['https://images.unsplash.com/photo-1695048133142-1a20484d2569?w=400'],
-    variations: [
-      { attrs: { Color: 'Natural Titanium', Storage: '256GB' }, price: 1149.00, quantity: 5 },
-      { attrs: { Color: 'Black Titanium', Storage: '512GB' }, price: 1349.00, quantity: 5 },
-    ],
-  },
-  {
-    id: 102,
-    name: 'Samsung Galaxy S24 Ultra',
-    price: 1299.00,
-    sale_price: 1199.00,
-    quantity: 8,
-    images: ['https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?w=400'],
-    variations: [
-      { attrs: { Color: 'Titanium Gray', Storage: '256GB' }, price: 1199.00, quantity: 4 },
-      { attrs: { Color: 'Titanium Black', Storage: '512GB' }, price: 1399.00, quantity: 4 },
-    ],
-  },
-  {
-    id: 103,
-    name: 'AirPods Pro (2nd Gen)',
-    price: 249.00,
-    sale_price: null,
-    quantity: 15,
-    images: ['https://images.unsplash.com/photo-1600294037681-c80b4cb5b434?w=400'],
-    variations: [],
-  },
-  {
-    id: 104,
-    name: 'Anker 65W Fast Charger',
-    price: 39.99,
-    sale_price: 29.99,
-    quantity: 0,
-    images: [],
-    variations: [],
-  },
-];
+const API_PRODUCTS = 'http://localhost/phone-shop/Backend/public/api/products';
+const API_SALES    = 'http://localhost/phone-shop/Backend/public/api/sales';
+const IMAGE_BASE   = 'http://localhost/phone-shop/Backend/public/';
 
-export default function POS() {
-  const [products, setProducts] = useState(INITIAL_PRODUCTS);
-  const [search, setSearch] = useState('');
+export default function PosSale() {
+  const [products, setProducts] = useState([]);
   const [cart, setCart] = useState([]);
-  const [customerName, setCustomerName] = useState('POS Customer');
+  const [search, setSearch] = useState('');
+  const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
-  const [picker, setPicker] = useState(null);
-  const [pickVar, setPickVar] = useState(null);
-  const [pickQty, setPickQty] = useState(1);
-  const [payModal, setPayModal] = useState(null);
-  const payTimer = useRef(null);
+  const [loading, setLoading] = useState(false);
+  const [failedImages, setFailedImages] = useState({});
 
-  const filtered = useMemo(() => {
-    const s = search.trim().toLowerCase();
-    if (!s) return products;
-    return products.filter((p) => p.name.toLowerCase().includes(s));
-  }, [products, search]);
-
-  const variationLabel = (attrs) => Object.entries(attrs || {}).map(([k, v]) => `${k}: ${v}`).join(' | ');
-
-  const openPicker = (product) => {
-    setPicker(product);
-    const vs = product.variations || [];
-    setPickVar(vs.length > 0 ? vs[0] : null);
-    setPickQty(1);
+  // ទាញយកបញ្ជីទំនិញពី Backend
+  const fetchProducts = async () => {
+    try {
+      const res = await axios.get(API_PRODUCTS);
+      const productList = Array.isArray(res.data) ? res.data : (res.data.data || []);
+      setProducts(productList);
+    } catch (err) {
+      console.error('Fetch error:', err);
+      alert('មិនអាចទាញយកទំនិញបានទេ!');
+    }
   };
 
-  const addToCart = () => {
-    const product = picker;
-    if (!product) return;
-    const vs = product.variations || [];
-    const variation = vs.length > 0 ? pickVar : null;
-    const price = variation?.price ?? product.sale_price ?? product.price ?? 0;
-    setCart((prev) => {
-      const key = JSON.stringify(variation?.attrs || {});
-      const found = prev.find((i) => i.product_id === product.id && JSON.stringify(i.variations) === key);
-      if (found) return prev.map((i) => (i === found ? { ...i, quantity: i.quantity + pickQty } : i));
-      return [...prev, {
-        product_id: product.id, name: product.name, price,
-        quantity: pickQty, variations: variation?.attrs || {},
-        variationLabel: variation ? variationLabel(variation.attrs) : '',
-      }];
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
+  // Helper Function រៀបចំ URL រូបភាព ការពារ Double Slashes និង 403 Forbidden
+  const getImageUrl = (imagePath) => {
+    if (!imagePath) return null;
+
+    // ១. ប្រសិនបើជា URL ពេញលេញស្រាប់ (http://...)
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      return imagePath;
+    }
+
+    // ២. លុបសញ្ញា / ខាងមុខ
+    let cleanPath = imagePath.replace(/^\/+/, '');
+
+    // ៣. ប្រសិនបើក្នុង Database មានត្រឹមតែឈ្មោះរូប (ឧ. "iphone.jpg")
+    // វានឹងថែម uploads/products/ ឱ្យដោយស្វ័យប្រវត្តិ
+    if (!cleanPath.includes('/')) {
+      cleanPath = `uploads/products/${cleanPath}`;
+    }
+
+    return `${IMAGE_BASE}${cleanPath}`;
+  };
+
+  // មុខងារបន្ថែមទំនិញចូល Cart (ជាមួយការឆែកស្តុក)
+  const addToCart = (product) => {
+    const stock = Number(product.stock_qty ?? product.stock ?? product.quantity ?? 0);
+
+    if (stock <= 0) {
+      alert('ទំនិញនេះអស់ពីស្តុកហើយ (Out of stock)!');
+      return;
+    }
+
+    setCart((prevCart) => {
+      const pId = product.product_id || product.id;
+      const exist = prevCart.find((item) => (item.product_id || item.id) === pId);
+
+      if (exist) {
+        if (exist.qty >= stock) {
+          alert(`មិនអាចបន្ថែមទៀតបានទេ! ទំនិញនេះសល់ត្រឹមតែ ${stock} ក្នុងស្តុក។`);
+          return prevCart;
+        }
+        return prevCart.map((item) =>
+          (item.product_id || item.id) === pId
+            ? { ...item, qty: item.qty + 1 }
+            : item
+        );
+      }
+      return [...prevCart, { ...product, qty: 1 }];
     });
-    setPicker(null); setPickVar(null); setPickQty(1);
   };
 
-  const updateQty = (idx, qty) => setCart((prev) => prev.map((i, n) => (n === idx ? { ...i, quantity: Math.max(1, qty) } : i)));
-  const removeLine = (idx) => setCart((prev) => prev.filter((_, n) => n !== idx));
-  const total = useMemo(() => cart.reduce((sum, i) => sum + i.price * i.quantity, 0), [cart]);
-
-  // Local inventory deduction upon completed purchase
-  const updateLocalStock = () => {
-    setProducts((prevProducts) =>
-      prevProducts.map((p) => {
-        const cartItemsForProduct = cart.filter((c) => c.product_id === p.id);
-        if (cartItemsForProduct.length === 0) return p;
-
-        const totalDeduction = cartItemsForProduct.reduce((sum, c) => sum + c.quantity, 0);
-        return {
-          ...p,
-          quantity: Math.max(0, p.quantity - totalDeduction),
-        };
+  // បន្ថែមចំនួន (+) ក្នុង Cart
+  const increaseQty = (productId) => {
+    setCart((prevCart) =>
+      prevCart.map((item) => {
+        const id = item.product_id || item.id;
+        if (id === productId) {
+          const stock = Number(item.stock_qty ?? item.stock ?? item.quantity ?? 0);
+          if (item.qty + 1 > stock) {
+            alert(`ស្តុកមានត្រឹមតែ ${stock} ប៉ុណ្ណោះ!`);
+            return item;
+          }
+          return { ...item, qty: item.qty + 1 };
+        }
+        return item;
       })
     );
   };
 
-  const payCash = () => {
-    if (cart.length === 0) { toast.error('Cart is empty'); return; }
-    const mockOrderNum = Math.floor(1000 + Math.random() * 9000);
-    toast.success(`បានលក់ជោគជ័យ! Order #${mockOrderNum} — paid`);
-    updateLocalStock();
-    setCart([]); setCustomerName('POS Customer'); setCustomerPhone('');
+  // បន្ថយចំនួន (-) ក្នុង Cart
+  const decreaseQty = (productId) => {
+    setCart((prevCart) =>
+      prevCart
+        .map((item) => {
+          const id = item.product_id || item.id;
+          if (id === productId) {
+            return { ...item, qty: item.qty - 1 };
+          }
+          return item;
+        })
+        .filter((item) => item.qty > 0)
+    );
   };
 
-  const payKHQR = () => {
-    if (cart.length === 0) { toast.error('Cart is empty'); return; }
-    const mockOrderNum = Math.floor(1000 + Math.random() * 9000);
-    const mockOrder = { order_number: mockOrderNum, total };
+  // គណនាសរុបទឹកប្រាក់
+  const totalAmount = cart.reduce((sum, item) => sum + Number(item.price || 0) * item.qty, 0);
 
-    setPayModal({ order: mockOrder, verified: false });
+  // មុខងារ Checkout គិតលុយ
+  const handleCheckout = async (paymentMethod) => {
+    if (cart.length === 0) {
+      alert('សូមជ្រើសរើសទំនិញចូល Cart ជាមុនសិន!');
+      return;
+    }
 
-    // Mock payment verification simulation after 3 seconds
-    payTimer.current = setTimeout(() => {
-      toast.success('KHQR payment confirmed! Stock updated');
-      setPayModal((m) => (m ? { ...m, verified: true } : m));
-      updateLocalStock();
+    setLoading(true);
+    try {
+      const payload = {
+        total_amount: totalAmount,
+        payment_method: paymentMethod,
+        customer_name: customerName || 'POS Customer',
+        customer_phone: customerPhone || null,
+        items: cart.map((item) => ({
+          product_id: item.product_id || item.id,
+          quantity: item.qty,
+          unit_price: item.price,
+        })),
+      };
+
+      await axios.post(API_SALES, payload);
+      alert(`ទូទាត់ប្រាក់ (${paymentMethod}) ជោគជ័យ!`);
+
+      // Reset Form និង Fetch ទំនិញសារថ្មីដើម្បី Update ស្តុក
       setCart([]);
-    }, 3000);
+      setCustomerName('');
+      setCustomerPhone('');
+      fetchProducts();
+    } catch (err) {
+      console.error(err);
+      const errorMsg = err.response?.data?.message || 'មានបញ្ហាក្នុងការទូទាត់ប្រាក់!';
+      alert(errorMsg);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const filteredProducts = products.filter((p) =>
+    (p.product_name || p.name || '').toLowerCase().includes(search.toLowerCase())
+  );
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold flex items-center gap-2 text-gray-800">
-          <span className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center"><FiCreditCard /></span>
-          POS Sale
-        </h1>
-        <span className="text-sm text-gray-500 bg-white border border-gray-200 rounded-full px-3 py-1.5">
-          {filtered.length} products
-        </span>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Product list */}
-        <div className="lg:col-span-2">
-          <div className="flex items-center gap-3 bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-3 mb-4 focus-within:ring-2 ring-indigo-200">
-            <FiSearch className="text-gray-400" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search products..."
-              className="flex-1 text-sm focus:outline-none"
-            />
-            {search && (
-              <button onClick={() => setSearch('')} className="text-gray-400 hover:text-gray-600"><FiX /></button>
-            )}
-          </div>
-
-          {filtered.length === 0 ? (
-            <div className="text-center text-gray-400 py-16 bg-white rounded-xl shadow-sm">No products</div>
-          ) : (
-            <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-              {filtered.map((p) => {
-                const stock = p.quantity || 0;
-                return (
-                  <button
-                    key={p.id}
-                    onClick={() => openPicker(p)}
-                    disabled={stock <= 0}
-                    className="group relative aspect-square rounded-xl overflow-hidden bg-gray-100 shadow-sm border border-gray-100 hover:shadow-lg hover:border-indigo-200 hover:-translate-y-0.5 focus:outline-none focus:ring-2 ring-indigo-300 transition disabled:opacity-50"
-                  >
-                    {p.images?.[0] ? (
-                      <img src={p.images[0]} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-gray-300"><FiShoppingCart className="w-10 h-10" /></div>
-                    )}
-
-                    {/* Stock badge */}
-                    <span className={`absolute top-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm ${stock <= 0 ? 'bg-red-500 text-white' : 'bg-white/90 text-emerald-700'}`}>
-                      {stock <= 0 ? 'Out' : `${stock} left`}
-                    </span>
-
-                    {/* Price badge */}
-                    <span className="absolute top-2 right-2 text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm bg-white/90 text-indigo-600">
-                      ${(p.sale_price ?? p.price ?? 0).toFixed(2)}
-                    </span>
-
-                    {/* Name */}
-                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent px-2.5 pb-2 pt-7">
-                      <p className="text-white text-xs font-semibold truncate">{p.name}</p>
-                    </div>
-
-                    {/* Out of stock overlay */}
-                    {stock <= 0 && (
-                      <span className="absolute inset-0 bg-white/60 flex items-center justify-center">
-                        <span className="bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow">Out of stock</span>
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
+    <div className="flex gap-6 p-6 min-h-screen bg-slate-50">
+      {/* ផ្នែកខាងឆ្វេង៖ បញ្ជីទំនិញ */}
+      <div className="flex-1">
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-2xl font-bold">POS Sale</h1>
+          <span className="text-sm text-gray-500">{products.length} products</span>
         </div>
 
-        {/* Cart */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 h-fit sticky top-4">
-          <h2 className="font-bold flex items-center gap-2 mb-4 text-gray-800"><FiShoppingCart className="text-indigo-600" /> Cart ({cart.length})</h2>
-          <div className="space-y-2 max-h-72 overflow-y-auto mb-4">
-            {cart.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-8">Add products to start a sale.</p>
-            ) : (
-              cart.map((i, idx) => (
-                <div key={idx} className="flex items-center gap-2 bg-gray-50 rounded-xl p-2">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate">{i.name}</p>
-                    {i.variationLabel && <p className="text-xs text-gray-400 truncate">{i.variationLabel}</p>}
-                    <p className="text-xs text-gray-500">${i.price.toFixed(2)}</p>
-                  </div>
-                  <div className="flex items-center bg-white border rounded-lg">
-                    <button onClick={() => updateQty(idx, i.quantity - 1)} className="px-1.5 py-1 text-gray-500 hover:text-indigo-600"><FiMinus /></button>
-                    <span className="w-5 text-center text-sm font-semibold">{i.quantity}</span>
-                    <button onClick={() => updateQty(idx, i.quantity + 1)} className="px-1.5 py-1 text-gray-500 hover:text-indigo-600"><FiPlus /></button>
-                  </div>
-                  <span className="text-sm font-bold w-16 text-right">${(i.price * i.quantity).toFixed(2)}</span>
-                  <button onClick={() => removeLine(idx)} className="p-1 text-red-400 hover:text-red-600"><FiTrash2 /></button>
+        <input
+          type="text"
+          placeholder="Search products..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full p-3 border rounded-xl mb-6 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        />
+
+        <div className="grid grid-cols-3 gap-4">
+          {filteredProducts.map((p) => {
+            const pId = p.product_id || p.id;
+            const stock = Number(p.stock_qty ?? p.stock ?? p.quantity ?? 0);
+            const name = p.product_name || p.name;
+            const price = Number(p.price || 0);
+
+            const imageUrl = getImageUrl(p.image);
+            const isImageBroken = failedImages[pId];
+
+            return (
+              <div
+                key={pId}
+                onClick={() => addToCart(p)}
+                className="p-4 bg-white rounded-2xl shadow-sm border transition cursor-pointer hover:shadow-md hover:border-indigo-500 relative overflow-hidden"
+              >
+                <div className="flex justify-between text-xs mb-2">
+                  <span
+                    className={`px-2 py-0.5 rounded-full font-bold ${
+                      stock > 0 ? 'bg-black text-white' : 'bg-red-500 text-white'
+                    }`}
+                  >
+                    {stock > 0 ? `${stock} left` : 'Out of stock'}
+                  </span>
+                  <span className="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-bold">
+                    ${price.toFixed(2)}
+                  </span>
                 </div>
-              ))
+
+                {/* បង្ហាញរូបភាពទំនិញ ជាមួយ Fallback Emoji ករណីទាញរូបមិនបាន */}
+                <div className="h-28 bg-slate-100 rounded-xl mb-3 flex items-center justify-center overflow-hidden border">
+                  {imageUrl && !isImageBroken ? (
+                    <img
+                      src={imageUrl}
+                      alt={name}
+                      className="w-full h-full object-cover"
+                      onError={() => {
+                        setFailedImages((prev) => ({ ...prev, [pId]: true }));
+                      }}
+                    />
+                  ) : (
+                    <span className="text-3xl">📱</span>
+                  )}
+                </div>
+
+                <h3 className="font-semibold text-sm truncate">{name}</h3>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ផ្នែកខាងស្តាំ៖ Cart & Checkout */}
+      <div className="w-96 bg-white p-6 rounded-2xl shadow-sm border flex flex-col justify-between">
+        <div>
+          <h2 className="text-lg font-bold mb-4">🛒 Cart ({cart.length})</h2>
+
+          <div className="space-y-3 max-h-60 overflow-y-auto mb-4">
+            {cart.length === 0 ? (
+              <p className="text-gray-400 text-center py-8">Add products to start a sale.</p>
+            ) : (
+              cart.map((item) => {
+                const id = item.product_id || item.id;
+                return (
+                  <div key={id} className="flex justify-between items-center text-sm p-2 bg-slate-50 rounded-lg">
+                    <div className="flex-1">
+                      <div className="font-semibold">{item.product_name || item.name}</div>
+                      <div className="text-gray-500 text-xs">${item.price} x {item.qty}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => decreaseQty(id)}
+                        className="px-2 py-0.5 bg-gray-200 rounded font-bold hover:bg-gray-300"
+                      >
+                        -
+                      </button>
+                      <span className="font-bold">{item.qty}</span>
+                      <button
+                        onClick={() => increaseQty(id)}
+                        className="px-2 py-0.5 bg-gray-200 rounded font-bold hover:bg-gray-300"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
             )}
           </div>
 
-          <div className="space-y-2 text-sm mb-4">
-            <input value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Customer name" />
-            <input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Phone (optional)" />
+          <div className="space-y-3 border-t pt-4">
+            <input
+              type="text"
+              placeholder="POS Customer"
+              value={customerName}
+              onChange={(e) => setCustomerName(e.target.value)}
+              className="w-full p-2 border rounded-lg text-sm"
+            />
+            <input
+              type="text"
+              placeholder="Phone (optional)"
+              value={customerPhone}
+              onChange={(e) => setCustomerPhone(e.target.value)}
+              className="w-full p-2 border rounded-lg text-sm"
+            />
           </div>
+        </div>
 
-          <div className="flex justify-between items-center font-bold text-xl border-t pt-3 mb-4">
-            <span className="text-gray-700">Total</span>
-            <span className="text-indigo-600">${total.toFixed(2)}</span>
+        <div className="border-t pt-4 mt-6">
+          <div className="flex justify-between items-center text-xl font-bold mb-4">
+            <span>Total</span>
+            <span className="text-indigo-600">${totalAmount.toFixed(2)}</span>
           </div>
 
           <div className="space-y-2">
-            <button onClick={payCash} disabled={cart.length === 0} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 rounded-xl disabled:opacity-40 shadow-sm transition">
-              បង់ប្រាក់ផ្ទាល់ (Cash)
+            <button
+              disabled={loading || cart.length === 0}
+              onClick={() => handleCheckout('Cash')}
+              className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl shadow transition disabled:opacity-50"
+            >
+              {loading ? 'Processing...' : 'បង់ប្រាក់ផ្ទាល់ (Cash)'}
             </button>
-            <button onClick={payKHQR} disabled={cart.length === 0} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 rounded-xl disabled:opacity-40 shadow-sm transition">
-              KHQR (ABA Pay)
+            <button
+              disabled={loading || cart.length === 0}
+              onClick={() => handleCheckout('ABA KHQR')}
+              className="w-full py-3 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-xl shadow transition disabled:opacity-50"
+            >
+              {loading ? 'Processing...' : 'KHQR (ABA Pay)'}
             </button>
           </div>
         </div>
       </div>
-
-      {/* Variation picker modal */}
-      {picker && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setPicker(null)}>
-          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="relative">
-              <div className="aspect-video bg-gray-100">
-                {picker.images?.[0] ? (
-                  <img src={picker.images[0]} alt={picker.name} className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-gray-300"><FiShoppingCart className="w-14 h-14" /></div>
-                )}
-              </div>
-              <button onClick={() => setPicker(null)} className="absolute top-3 right-3 bg-white/90 hover:bg-white text-gray-600 rounded-full p-1.5 shadow">
-                <FiX className="w-4 h-4" />
-              </button>
-              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-4 pb-2 pt-8">
-                <p className="text-white font-bold truncate">{picker.name}</p>
-              </div>
-            </div>
-
-            <div className="p-5">
-              {(picker.variations || []).length > 0 ? (
-                <div>
-                  <p className="text-sm font-semibold text-gray-700 mb-2">Choose option</p>
-                  <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {picker.variations.map((v, i) => (
-                      <button
-                        key={i}
-                        onClick={() => setPickVar(v)}
-                        className={`w-full flex items-center justify-between border-2 rounded-lg px-3 py-2.5 text-sm transition ${pickVar === v ? 'border-indigo-600 bg-indigo-50' : 'border-gray-200 hover:border-gray-400'}`}
-                      >
-                        <span className="font-medium">{variationLabel(v.attrs)}</span>
-                        <span className="text-gray-500">
-                          {v.price ? `$${v.price.toFixed(2)}` : ''}
-                          <span className={`ml-2 text-xs font-semibold ${(v.quantity ?? 0) <= 0 ? 'text-red-500' : 'text-emerald-600'}`}>
-                            {(v.quantity ?? 0) <= 0 ? 'Out' : `${v.quantity} left`}
-                          </span>
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <p className="text-sm text-gray-600">
-                  Price: <span className="font-bold text-indigo-600">${(picker.sale_price ?? picker.price ?? 0).toFixed(2)}</span>
-                </p>
-              )}
-
-              <div className="flex items-center justify-between mt-4">
-                <span className="text-sm font-semibold text-gray-700">Quantity</span>
-                <div className="flex items-center border-2 border-gray-200 rounded-xl overflow-hidden">
-                  <button onClick={() => setPickQty(Math.max(1, pickQty - 1))} className="px-4 py-2 text-gray-500 hover:bg-gray-100 font-bold"><FiMinus /></button>
-                  <span className="w-10 text-center font-bold">{pickQty}</span>
-                  <button onClick={() => setPickQty(pickQty + 1)} className="px-4 py-2 text-gray-500 hover:bg-gray-100 font-bold"><FiPlus /></button>
-                </div>
-              </div>
-
-              <button
-                onClick={addToCart}
-                disabled={(pickVar?.quantity ?? picker.quantity ?? 0) <= 0}
-                className="mt-4 w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl font-semibold disabled:opacity-40 flex items-center justify-center gap-2"
-              >
-                <FiShoppingCart /> Add to Cart
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* KHQR payment modal */}
-      {payModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full text-center" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-bold text-lg mb-1">Scan to pay (ABA KHQR)</h3>
-            <p className="text-sm text-gray-500 mb-4">Order #{payModal.order.order_number} · ${payModal.order.total.toFixed(2)}</p>
-
-            <div className="w-56 h-56 mx-auto rounded-xl border p-4 bg-slate-50 flex flex-col items-center justify-center">
-              <div className="w-32 h-32 bg-slate-200 rounded-lg flex items-center justify-center text-slate-400 text-xs font-mono border border-dashed border-slate-400">
-                [KHQR QR Code]
-              </div>
-              <p className="text-xs text-slate-500 mt-2">Demo ABA KHQR Standalone</p>
-            </div>
-
-            <p className="text-sm text-gray-600 mt-3 font-medium">
-              {payModal.verified ? '✓ Payment confirmed!' : '⏳ Simulating payment (3s)...'}
-            </p>
-            <div className="mt-4">
-              <button
-                onClick={() => { clearTimeout(payTimer.current); setPayModal(null); }}
-                className="w-full px-4 py-2.5 rounded-xl border text-gray-600 font-semibold hover:bg-gray-50"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
