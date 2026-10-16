@@ -3,71 +3,133 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Category;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 class CategoryController extends Controller
 {
-    // ១. ទាញយកបញ្ជី Category ទាំងអស់
+    // 1. ទាញយកបញ្ជីប្រភេទទំនិញ + រាប់ចំនួន Product
     public function index()
     {
-        return response()->json(Category::all(), 200);
+        try {
+            if (!Schema::hasTable('categories')) {
+                return response()->json([]);
+            }
+
+            $catCols = Schema::getColumnListing('categories');
+            $idCol   = in_array('category_id', $catCols) ? 'category_id' : (in_array('id', $catCols) ? 'id' : $catCols[0]);
+            $nameCol = in_array('category_name', $catCols) ? 'category_name' : (in_array('name', $catCols) ? 'name' : $catCols[1] ?? 'name');
+            $sortCol = in_array('sort_order', $catCols) ? 'sort_order' : (in_array('sort', $catCols) ? 'sort' : null);
+
+            $query = DB::table('categories');
+            if ($sortCol) {
+                $query->orderBy($sortCol, 'asc');
+            } else {
+                $query->orderBy($idCol, 'asc');
+            }
+
+            $categories = $query->get()->map(function ($c) use ($idCol, $nameCol, $sortCol) {
+                $catId = $c->$idCol;
+
+                // រាប់ចំនួន Products ដែលនៅក្នុង Category នេះ
+                $productCount = 0;
+                if (Schema::hasTable('products') && Schema::hasColumn('products', 'category_id')) {
+                    $productCount = DB::table('products')->where('category_id', $catId)->count();
+                }
+
+                return [
+                    'id'             => $catId,
+                    'name'           => $c->$nameCol ?? '',
+                    'slug'           => $c->slug ?? Str::slug($c->$nameCol ?? ''),
+                    'sort_order'     => $sortCol ? ($c->$sortCol ?? 1) : 1,
+                    'products_count' => $productCount,
+                ];
+            });
+
+            return response()->json($categories);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
     }
 
-    // ២. បន្ថែម Category ថ្មី
+    // 2. បន្ថែម Category ថ្មី
     public function store(Request $request)
     {
         $request->validate([
             'name' => 'required|string|max:255',
         ]);
 
-        $category = Category::create([
-            'name'        => $request->name,
-            'description' => $request->description ?? null,
-        ]);
+        try {
+            $catCols = Schema::getColumnListing('categories');
+            $data = [];
 
-        return response()->json($category, 201);
-    }
+            if (in_array('category_name', $catCols)) {
+                $data['category_name'] = $request->name;
+            } elseif (in_array('name', $catCols)) {
+                $data['name'] = $request->name;
+            }
 
-    // ៣. មើល Category មួយតាម ID
-    public function show($id)
-    {
-        $category = Category::find($id);
-        if (!$category) {
-            return response()->json(['message' => 'រកមិនឃើញប្រភេទទំនិញឡើយ'], 404);
+            if (in_array('slug', $catCols)) {
+                $data['slug'] = $request->slug ? Str::slug($request->slug) : Str::slug($request->name);
+            }
+
+            if (in_array('sort_order', $catCols)) {
+                $data['sort_order'] = $request->sort_order ?? (DB::table('categories')->count() + 1);
+            } elseif (in_array('sort', $catCols)) {
+                $data['sort'] = $request->sort_order ?? (DB::table('categories')->count() + 1);
+            }
+
+            if (in_array('created_at', $catCols)) $data['created_at'] = now();
+            if (in_array('updated_at', $catCols)) $data['updated_at'] = now();
+
+            $id = DB::table('categories')->insertGetId($data);
+
+            return response()->json(['message' => 'Category created successfully', 'id' => $id], 201);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
         }
-        return response()->json($category, 200);
     }
 
-    // ៤. កែប្រែ Category
+    // 3. កែប្រែ Category
     public function update(Request $request, $id)
     {
-        $category = Category::find($id);
-        if (!$category) {
-            return response()->json(['message' => 'រកមិនឃើញប្រភេទទំនិញឡើយ'], 404);
+        try {
+            $catCols = Schema::getColumnListing('categories');
+            $idCol   = in_array('category_id', $catCols) ? 'category_id' : 'id';
+
+            $data = [];
+            if (in_array('category_name', $catCols)) $data['category_name'] = $request->name;
+            if (in_array('name', $catCols))          $data['name']          = $request->name;
+
+            if (in_array('slug', $catCols)) {
+                $data['slug'] = $request->slug ? Str::slug($request->slug) : Str::slug($request->name);
+            }
+
+            if (in_array('sort_order', $catCols)) $data['sort_order'] = $request->sort_order;
+            if (in_array('sort', $catCols))       $data['sort']       = $request->sort_order;
+            if (in_array('updated_at', $catCols)) $data['updated_at'] = now();
+
+            DB::table('categories')->where($idCol, $id)->update($data);
+
+            return response()->json(['message' => 'Category updated successfully']);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
         }
-
-        $request->validate([
-            'name' => 'required|string|max:255',
-        ]);
-
-        $category->update([
-            'name'        => $request->name,
-            'description' => $request->description ?? $category->description,
-        ]);
-
-        return response()->json($category, 200);
     }
 
-    // ៥. លុប Category
+    // 4. លុប Category
     public function destroy($id)
     {
-        $category = Category::find($id);
-        if (!$category) {
-            return response()->json(['message' => 'រកមិនឃើញប្រភេទទំនិញឡើយ'], 404);
-        }
+        try {
+            $catCols = Schema::getColumnListing('categories');
+            $idCol   = in_array('category_id', $catCols) ? 'category_id' : 'id';
 
-        $category->delete();
-        return response()->json(['message' => 'លុបប្រភេទទំនិញជោគជ័យ!'], 200);
+            DB::table('categories')->where($idCol, $id)->delete();
+            return response()->json(['message' => 'Category deleted successfully']);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
     }
 }

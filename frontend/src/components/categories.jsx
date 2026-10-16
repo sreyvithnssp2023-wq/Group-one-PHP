@@ -1,223 +1,285 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import toast from 'react-hot-toast';
-import { FiEdit, FiTrash2, FiX } from 'react-icons/fi';
+import { FiPlus, FiEdit3, FiTrash2, FiArrowUp, FiArrowDown, FiX } from 'react-icons/fi';
 
-const INITIAL_CATEGORIES = [
-  { id: 1, name: 'Smartphones', slug: 'smartphones', sort_order: 1, product_count: 12 },
-  { id: 2, name: 'Accessories', slug: 'accessories', sort_order: 2, product_count: 24 },
-  { id: 3, name: 'Tablets', slug: 'tablets', sort_order: 3, product_count: 5 },
-  { id: 4, name: 'Smartwatches', slug: 'smartwatches', sort_order: 4, product_count: 8 },
-];
-
-const emptyForm = { name: '', slug: '', sort_order: 0 };
-
-// Inline Modal Component
-function Modal({ open, title, onClose, children }) {
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-xl shadow-lg w-full max-w-md overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b">
-          <h2 className="text-lg font-bold">{title}</h2>
-          <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 rounded-lg">
-            <FiX size={20} />
-          </button>
-        </div>
-        <div className="p-6">{children}</div>
-      </div>
-    </div>
-  );
-}
+const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://127.0.0.1/phone-shop/Backend/public/api';
 
 export default function Categories() {
-  const [categories, setCategories] = useState(INITIAL_CATEGORIES);
-  const [modal, setModal] = useState(false);
-  const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState(emptyForm);
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editId, setEditId] = useState(null);
 
-  const openCreate = () => {
-    setEditing(null);
-    setForm({ ...emptyForm, sort_order: categories.length + 1 });
-    setModal(true);
+  const [form, setForm] = useState({
+    name: '',
+    slug: '',
+    sort_order: 1,
+  });
+
+  const fetchCategories = async () => {
+    try {
+      setLoading(true);
+      const res = await axios.get(`${API_BASE}/categories`);
+      const list = Array.isArray(res.data) ? res.data : [];
+      setCategories(list);
+    } catch (err) {
+      console.error('Error fetching categories:', err);
+      toast.error('មិនអាចទាញយកទិន្នន័យ Categories បានទេ!');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const openEdit = (c) => {
-    setEditing(c);
-    setForm({ name: c.name, slug: c.slug, sort_order: c.sort_order });
-    setModal(true);
+  useEffect(() => {
+    fetchCategories();
+  }, []);
+
+  const handleOpenModal = (cat = null) => {
+    if (cat) {
+      setEditId(cat.id);
+      setForm({
+        name: cat.name,
+        slug: cat.slug,
+        sort_order: cat.sort_order || 1,
+      });
+    } else {
+      setEditId(null);
+      setForm({
+        name: '',
+        slug: '',
+        sort_order: categories.length + 1,
+      });
+    }
+    setModalOpen(true);
   };
 
-  const submit = (e) => {
+  const handleCloseModal = () => {
+    setModalOpen(false);
+    setEditId(null);
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.name.trim()) {
-      toast.error('Category name is required');
+      toast.error('សូមបញ្ចូលឈ្មោះ Category!');
       return;
     }
 
-    const categorySlug = form.slug.trim() || form.name.toLowerCase().replace(/\s+/g, '-');
-    const sortOrderNum = Number(form.sort_order) || 0;
-
-    if (editing) {
-      setCategories((prev) =>
-        prev.map((item) =>
-          item.id === editing.id
-            ? { ...item, name: form.name, slug: categorySlug, sort_order: sortOrderNum }
-            : item
-        )
-      );
-      toast.success('Category updated (Mock)');
-    } else {
-      const newCategory = {
-        id: Date.now(),
-        name: form.name,
-        slug: categorySlug,
-        sort_order: sortOrderNum,
-        product_count: 0,
-      };
-      setCategories((prev) => [...prev, newCategory]);
-      toast.success('Category created (Mock)');
+    try {
+      if (editId) {
+        await axios.put(`${API_BASE}/categories/${editId}`, form);
+        toast.success('បានបច្ចុប្បន្នភាព Category រួចរាល់!');
+      } else {
+        await axios.post(`${API_BASE}/categories`, form);
+        toast.success('បានបន្ថែម Category ថ្មីជោគជ័យ!');
+      }
+      handleCloseModal();
+      fetchCategories();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'មានបញ្ហាក្នុងការរក្សាទុក!');
     }
-
-    setModal(false);
   };
 
-  const remove = (c) => {
-    if (!window.confirm(`Delete category "${c.name}"?`)) return;
-    setCategories((prev) => prev.filter((item) => item.id !== c.id));
-    toast.success('Category deleted (Mock)');
+  const handleDelete = async (id) => {
+    if (!window.confirm('តើអ្នកពិតជាចង់លុប Category នេះមែនទេ?')) return;
+    try {
+      await axios.delete(`${API_BASE}/categories/${id}`);
+      toast.success('បានលុប Category រួចរាល់!');
+      fetchCategories();
+    } catch (err) {
+      toast.error('មិនអាចលុបបានទេ!');
+    }
   };
 
-  const move = (c, dir) => {
-    setCategories((prev) =>
-      prev.map((item) =>
-        item.id === c.id ? { ...item, sort_order: item.sort_order + dir } : item
-      )
-    );
+  const handleSortChange = async (cat, direction) => {
+    const newSort = direction === 'up' ? cat.sort_order - 1 : cat.sort_order + 1;
+    if (newSort < 1) return;
+
+    try {
+      await axios.put(`${API_BASE}/categories/${cat.id}`, {
+        name: cat.name,
+        slug: cat.slug,
+        sort_order: newSort,
+      });
+      fetchCategories();
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   return (
-    <div>
+    <div className="p-2">
+      {/* Header Bar */}
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Categories</h1>
+        <h1 className="text-2xl font-bold text-slate-800">Categories</h1>
         <button
-          className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-4 py-2 rounded-lg text-sm"
-          onClick={openCreate}
+          onClick={() => handleOpenModal()}
+          className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
         >
-          + Add Category
+          <FiPlus size={16} /> Add Category
         </button>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        {categories.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">
-            No categories yet. Create one to organise your products.
-          </div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-slate-50 text-left text-xs uppercase text-gray-500">
-                <th className="px-4 py-3">Name</th>
-                <th className="px-4 py-3">Slug</th>
-                <th className="px-4 py-3">Sort</th>
-                <th className="px-4 py-3">Products</th>
-                <th className="px-4 py-3">Actions</th>
+      {/* Categories Table */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+        <table className="w-full text-sm text-left">
+          <thead>
+            <tr className="bg-slate-50 text-[11px] uppercase text-slate-400 font-bold border-b border-slate-100">
+              <th className="px-6 py-4">NAME</th>
+              <th className="px-6 py-4">SLUG</th>
+              <th className="px-6 py-4">SORT</th>
+              <th className="px-6 py-4">PRODUCTS</th>
+              <th className="px-6 py-4 text-right">ACTIONS</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 text-xs font-medium">
+            {loading ? (
+              <tr>
+                <td colSpan="5" className="px-6 py-8 text-center text-slate-400">
+                  Loading categories...
+                </td>
               </tr>
-            </thead>
-            <tbody className="divide-y">
-              {categories
-                .slice()
-                .sort((a, b) => a.sort_order - b.sort_order)
-                .map((c) => (
-                  <tr key={c.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 font-semibold">{c.name}</td>
-                    <td className="px-4 py-3 text-gray-500">{c.slug}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => move(c, -1)}
-                          className="w-6 h-6 rounded hover:bg-gray-100 text-gray-500 font-bold"
-                        >
-                          ↑
-                        </button>
-                        <span className="w-6 text-center">{c.sort_order}</span>
-                        <button
-                          onClick={() => move(c, 1)}
-                          className="w-6 h-6 rounded hover:bg-gray-100 text-gray-500 font-bold"
-                        >
-                          ↓
-                        </button>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">{c.product_count}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-1">
-                        <button
-                          onClick={() => openEdit(c)}
-                          className="p-2 rounded-lg hover:bg-slate-100 text-slate-600"
-                        >
-                          <FiEdit />
-                        </button>
-                        <button
-                          onClick={() => remove(c)}
-                          className="p-2 rounded-lg hover:bg-red-50 text-red-500"
-                        >
-                          <FiTrash2 />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        )}
+            ) : categories.length === 0 ? (
+              <tr>
+                <td colSpan="5" className="px-6 py-8 text-center text-slate-400">
+                  No categories found. Click "+ Add Category" to create one.
+                </td>
+              </tr>
+            ) : (
+              categories.map((cat) => (
+                <tr key={cat.id} className="hover:bg-slate-50/80 transition">
+                  {/* Name */}
+                  <td className="px-6 py-4 font-bold text-slate-800">{cat.name}</td>
+
+                  {/* Slug */}
+                  <td className="px-6 py-4 text-slate-400 font-normal">{cat.slug}</td>
+
+                  {/* Sort Order */}
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-2 text-slate-500">
+                      <button
+                        onClick={() => handleSortChange(cat, 'up')}
+                        className="hover:text-indigo-600 transition p-0.5"
+                      >
+                        <FiArrowUp size={12} />
+                      </button>
+                      <span className="font-semibold text-slate-700 w-4 text-center">
+                        {cat.sort_order}
+                      </span>
+                      <button
+                        onClick={() => handleSortChange(cat, 'down')}
+                        className="hover:text-indigo-600 transition p-0.5"
+                      >
+                        <FiArrowDown size={12} />
+                      </button>
+                    </div>
+                  </td>
+
+                  {/* Products Count */}
+                  <td className="px-6 py-4 font-semibold text-slate-700">
+                    {cat.products_count}
+                  </td>
+
+                  {/* Actions */}
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex items-center justify-end gap-3">
+                      <button
+                        onClick={() => handleOpenModal(cat)}
+                        className="text-slate-400 hover:text-indigo-600 transition"
+                      >
+                        <FiEdit3 size={15} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(cat.id)}
+                        className="text-rose-400 hover:text-rose-600 transition"
+                      >
+                        <FiTrash2 size={15} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
 
-      <Modal open={modal} title={editing ? 'Edit Category' : 'Add Category'} onClose={() => setModal(false)}>
-        <form onSubmit={submit} className="space-y-4">
-          <div>
-            <label className="text-sm font-medium text-gray-700 block mb-1">Name *</label>
-            <input
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="e.g. Headphones"
-            />
+      {/* Add / Edit Category Modal */}
+      {modalOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden animate-in fade-in zoom-in duration-150">
+            <div className="px-6 py-4 border-b flex items-center justify-between">
+              <h3 className="font-bold text-slate-800 text-sm">
+                {editId ? 'Edit Category' : 'Add New Category'}
+              </h3>
+              <button
+                onClick={handleCloseModal}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <FiX size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  Category Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Smartphones"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg text-xs focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  Slug (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. smartphones"
+                  value={form.slug}
+                  onChange={(e) => setForm({ ...form, slug: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg text-xs focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  Sort Order
+                </label>
+                <input
+                  type="number"
+                  value={form.sort_order}
+                  onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })}
+                  className="w-full px-3 py-2 border rounded-lg text-xs focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t">
+                <button
+                  type="button"
+                  onClick={handleCloseModal}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition"
+                >
+                  {editId ? 'Update' : 'Save Category'}
+                </button>
+              </div>
+            </form>
           </div>
-          <div>
-            <label className="text-sm font-medium text-gray-700 block mb-1">Slug</label>
-            <input
-              value={form.slug}
-              onChange={(e) => setForm({ ...form, slug: e.target.value })}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="headphones (auto if empty)"
-            />
-          </div>
-          <div>
-            <label className="text-sm font-medium text-gray-700 block mb-1">Sort Order</label>
-            <input
-              type="number"
-              value={form.sort_order}
-              onChange={(e) => setForm({ ...form, sort_order: e.target.value })}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
-          <div className="flex gap-2 pt-2">
-            <button
-              type="submit"
-              className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-4 py-2 rounded-lg text-sm"
-            >
-              {editing ? 'Save Changes' : 'Add Category'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setModal(false)}
-              className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium px-4 py-2 rounded-lg text-sm"
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
-      </Modal>
+        </div>
+      )}
     </div>
   );
 }

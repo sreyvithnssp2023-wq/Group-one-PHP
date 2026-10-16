@@ -11,18 +11,20 @@ class Sale extends Model
 
     protected $table = 'sales';
     protected $primaryKey = 'sale_id'; // ប្រសិនបើ Primary Key ក្នុង Database ឈ្មោះ 'id' សូមប្តូរទៅ 'id'
-    public $timestamps = false;
+
+    // បើកឱ្យ Laravel កត់ត្រាcreated_at និង updated_at ស្វ័យប្រវត្តិ
+    public $timestamps = true;
 
     protected $fillable = [
         'customer_id',
         'user_id',
+        'customer_name', // 👈 បានបន្ថែមចំណុចនេះ
         'sale_date',
         'total_amount',
         'discount',
         'payment_status'
     ];
 
-    // មុខងារនេះហើយដែល Laravel រកមិនឃើញ (ត្រូវតែមាន)
     public function details()
     {
         return $this->hasMany(SaleDetail::class, 'sale_id', 'sale_id');

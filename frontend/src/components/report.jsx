@@ -1,27 +1,9 @@
 import React, { useEffect, useState } from 'react';
+import axios from 'axios';
 import toast from 'react-hot-toast';
 import { FiDownload } from 'react-icons/fi';
 
-const MOCK_SALES = {
-  totals: { revenue: 12450.0, orders: 48 },
-  data: [
-    { date: '2026-09-08', orders: 15, revenue: 3450.0 },
-    { date: '2026-09-09', orders: 18, revenue: 4200.0 },
-    { date: '2026-09-10', orders: 15, revenue: 4800.0 },
-  ],
-};
-
-const MOCK_PRODUCTS = [
-  { name: 'iPhone 15 Pro', units: 22, revenue: 21978.0 },
-  { name: 'Samsung Galaxy S24', units: 14, revenue: 12586.0 },
-  { name: 'AirPods Pro 2', units: 35, revenue: 8715.0 },
-];
-
-const MOCK_CUSTOMERS = [
-  { id: 1, name: 'Sokha Chan', phone: '012 345 678', order_count: 5, total_spent: 1250.0 },
-  { id: 2, name: 'Bory Nguon', phone: '098 765 432', order_count: 3, total_spent: 890.0 },
-  { id: 3, name: 'Vannak Heng', phone: '077 112 233', order_count: 2, total_spent: 450.0 },
-];
+const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://127.0.0.1/phone-shop/Backend/public/api';
 
 export default function Reports() {
   const [period, setPeriod] = useState('daily');
@@ -31,16 +13,55 @@ export default function Reports() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('sales');
 
-  useEffect(() => {
+  // 🔄 ទាញយកទិន្នន័យពិតប្រាកដពី Laravel API ជំនួសឱ្យ MOCK Data
+  const fetchReportsData = async () => {
     setLoading(true);
-    const timer = setTimeout(() => {
-      setSales(MOCK_SALES);
-      setProducts(MOCK_PRODUCTS);
-      setCustomers(MOCK_CUSTOMERS);
-      setLoading(false);
-    }, 200);
+    try {
+      const res = await axios.get(`${API_BASE}/reports?period=${period}`);
+      if (res.data) {
+        // 1. Sales Data
+        setSales({
+          totals: {
+            revenue: Number(res.data.total_revenue || 0),
+            orders: Number(res.data.total_orders || 0),
+          },
+          data: (res.data.sales_report || []).map((item) => ({
+            date: item.period,
+            orders: item.orders,
+            revenue: Number(item.revenue || 0),
+          })),
+        });
 
-    return () => clearTimeout(timer);
+        // 2. Product Performance
+        setProducts(
+          (res.data.product_performance || []).map((item) => ({
+            name: item.product_name,
+            units: item.qty_sold,
+            revenue: Number(item.revenue || 0),
+          }))
+        );
+
+        // 3. Customer Report
+        setCustomers(
+          (res.data.customer_report || []).map((c, index) => ({
+            id: index + 1,
+            name: c.customer_name,
+            phone: c.phone || 'N/A',
+            order_count: c.orders,
+            total_spent: Number(c.total_spent || 0),
+          }))
+        );
+      }
+    } catch (err) {
+      console.error('Error fetching reports data:', err);
+      toast.error('មិនអាចទាញយកទិន្នន័យរបាយការណ៍បានទេ!');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchReportsData();
   }, [period]);
 
   const exportCsv = (rows, name) => {
@@ -60,7 +81,7 @@ export default function Reports() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${name}.csv`;
+    a.download = `${name}_${period}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -90,10 +111,11 @@ export default function Reports() {
                 <button
                   key={p}
                   onClick={() => setPeriod(p)}
-                  className={`px-3 py-1.5 rounded-md text-xs font-semibold capitalize ${period === p
-                    ? 'bg-indigo-600 text-white'
-                    : 'text-gray-600 hover:bg-gray-50'
-                    }`}
+                  className={`px-3 py-1.5 rounded-md text-xs font-semibold capitalize ${
+                    period === p
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-gray-600 hover:bg-gray-50'
+                  }`}
                 >
                   {p}
                 </button>
@@ -114,10 +136,11 @@ export default function Reports() {
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold ${tab === t.key
-              ? 'bg-indigo-600 text-white'
-              : 'bg-white text-gray-600 border hover:bg-gray-50'
-              }`}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold ${
+              tab === t.key
+                ? 'bg-indigo-600 text-white'
+                : 'bg-white text-gray-600 border hover:bg-gray-50'
+            }`}
           >
             {t.label}
           </button>
@@ -127,7 +150,7 @@ export default function Reports() {
       {tab === 'sales' && (
         <div className="bg-white rounded-xl shadow-sm overflow-hidden">
           <div className="p-5 border-b flex justify-between items-center">
-            <h2 className="font-bold">Sales — {period}</h2>
+            <h2 className="font-bold capitalize">Sales — {period}</h2>
             <span className="text-sm text-gray-500">
               <strong className="text-lg text-indigo-600">
                 ${sales?.totals?.revenue?.toFixed(2) || '0.00'}
@@ -144,13 +167,23 @@ export default function Reports() {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {sales?.data?.map((row) => (
-                <tr key={row.date} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium">{row.date}</td>
-                  <td className="px-4 py-3">{row.orders}</td>
-                  <td className="px-4 py-3 font-semibold">${row.revenue.toFixed(2)}</td>
+              {sales?.data?.length === 0 ? (
+                <tr>
+                  <td colSpan="3" className="text-center py-6 text-gray-400">
+                    No sales recorded for this period.
+                  </td>
                 </tr>
-              ))}
+              ) : (
+                sales?.data?.map((row, idx) => (
+                  <tr key={idx} className="hover:bg-slate-50">
+                    <td className="px-4 py-3 font-medium">{row.date}</td>
+                    <td className="px-4 py-3">{row.orders}</td>
+                    <td className="px-4 py-3 font-semibold text-indigo-600">
+                      ${row.revenue.toFixed(2)}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -176,13 +209,23 @@ export default function Reports() {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {products?.map((row, i) => (
-                <tr key={i} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium">{row.name}</td>
-                  <td className="px-4 py-3">{row.units}</td>
-                  <td className="px-4 py-3 font-semibold">${row.revenue.toFixed(2)}</td>
+              {products?.length === 0 ? (
+                <tr>
+                  <td colSpan="3" className="text-center py-6 text-gray-400">
+                    No product records found.
+                  </td>
                 </tr>
-              ))}
+              ) : (
+                products?.map((row, i) => (
+                  <tr key={i} className="hover:bg-slate-50">
+                    <td className="px-4 py-3 font-medium">{row.name}</td>
+                    <td className="px-4 py-3">{row.units}</td>
+                    <td className="px-4 py-3 font-semibold text-indigo-600">
+                      ${row.revenue.toFixed(2)}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -219,14 +262,24 @@ export default function Reports() {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {customers?.map((c) => (
-                <tr key={c.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium">{c.name}</td>
-                  <td className="px-4 py-3 text-gray-500">{c.phone}</td>
-                  <td className="px-4 py-3">{c.order_count}</td>
-                  <td className="px-4 py-3 font-semibold">${c.total_spent.toFixed(2)}</td>
+              {customers?.length === 0 ? (
+                <tr>
+                  <td colSpan="4" className="text-center py-6 text-gray-400">
+                    No customer records found.
+                  </td>
                 </tr>
-              ))}
+              ) : (
+                customers?.map((c) => (
+                  <tr key={c.id} className="hover:bg-slate-50">
+                    <td className="px-4 py-3 font-medium">{c.name}</td>
+                    <td className="px-4 py-3 text-gray-500">{c.phone}</td>
+                    <td className="px-4 py-3">{c.order_count}</td>
+                    <td className="px-4 py-3 font-semibold text-indigo-600">
+                      ${c.total_spent.toFixed(2)}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

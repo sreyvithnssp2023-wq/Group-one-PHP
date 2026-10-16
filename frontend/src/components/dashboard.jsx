@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import axios from 'axios';
 import {
   FiBox,
   FiDollarSign,
@@ -16,19 +17,22 @@ import {
   LineElement,
   Tooltip,
   Legend,
+  Filler,
 } from 'chart.js';
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, Filler);
+
+const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://127.0.0.1/phone-shop/Backend/public/api';
 
 const STATUS_COLORS = {
   pending: 'bg-amber-100 text-amber-700',
   processing: 'bg-blue-100 text-blue-700',
   shipped: 'bg-purple-100 text-purple-700',
   delivered: 'bg-green-100 text-green-700',
+  completed: 'bg-green-100 text-green-700',
   cancelled: 'bg-red-100 text-red-700',
 };
 
-// Sub-component for overview metrics
 function StatCard({ label, value, icon, color }) {
   return (
     <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between">
@@ -43,93 +47,198 @@ function StatCard({ label, value, icon, color }) {
   );
 }
 
-// Mock Overview Stat Data
-const MOCK_OVERVIEW = {
-  today_orders: 12,
-  today_revenue: 345.50,
-  total_products: 48,
-  total_customers: 128,
-  total_revenue: 12450.00,
-  recent_orders: [
-    { id: 1, order_number: '1001', customer_name: 'Sokha Chan', total: 45.00, currency: 'USD', payment_status: 'paid', order_status: 'delivered' },
-    { id: 2, order_number: '1002', customer_name: 'Bory Nguon', total: 120.50, currency: 'USD', payment_status: 'paid', order_status: 'processing' },
-    { id: 3, order_number: '1003', customer_name: 'Vannak Heng', total: 35.00, currency: 'USD', payment_status: 'unpaid', order_status: 'pending' },
-    { id: 4, order_number: '1004', customer_name: 'Dara Pich', total: 85.00, currency: 'USD', payment_status: 'paid', order_status: 'shipped' },
-  ],
-};
-
-// Mock Sales Chart Datasets by Period
-const MOCK_SALES_DATA = {
-  daily: [
-    { date: 'Mon', revenue: 120 },
-    { date: 'Tue', revenue: 210 },
-    { date: 'Wed', revenue: 180 },
-    { date: 'Thu', revenue: 290 },
-    { date: 'Fri', revenue: 345.5 },
-    { date: 'Sat', revenue: 420 },
-    { date: 'Sun', revenue: 380 },
-  ],
-  weekly: [
-    { date: 'Week 1', revenue: 1400 },
-    { date: 'Week 2', revenue: 2100 },
-    { date: 'Week 3', revenue: 1950 },
-    { date: 'Week 4', revenue: 2800 },
-  ],
-  monthly: [
-    { date: 'Jan', revenue: 8500 },
-    { date: 'Feb', revenue: 9200 },
-    { date: 'Mar', revenue: 10400 },
-    { date: 'Apr', revenue: 12450 },
-  ],
-};
-
 export default function Dashboard() {
-  const [overview] = useState(MOCK_OVERVIEW);
+  const [overview, setOverview] = useState({
+    today_orders: 0,
+    today_revenue: 0,
+    total_products: 0,
+    total_customers: 0,
+    total_revenue: 0,
+    recent_orders: [],
+  });
+
+  const [salesChart, setSalesChart] = useState({
+    daily: [
+      { date: 'Mon', revenue: 0 },
+      { date: 'Tue', revenue: 0 },
+      { date: 'Wed', revenue: 0 },
+      { date: 'Thu', revenue: 0 },
+      { date: 'Fri', revenue: 0 },
+      { date: 'Sat', revenue: 0 },
+      { date: 'Sun', revenue: 0 },
+    ],
+    weekly: [
+      { date: 'Week 1', revenue: 0 },
+      { date: 'Week 2', revenue: 0 },
+      { date: 'Week 3', revenue: 0 },
+      { date: 'Week 4', revenue: 0 },
+    ],
+    monthly: [
+      { date: 'Jan', revenue: 0 },
+      { date: 'Feb', revenue: 0 },
+      { date: 'Mar', revenue: 0 },
+      { date: 'Apr', revenue: 0 },
+      { date: 'May', revenue: 0 },
+      { date: 'Jun', revenue: 0 },
+      { date: 'Jul', revenue: 0 },
+      { date: 'Aug', revenue: 0 },
+      { date: 'Sep', revenue: 0 },
+      { date: 'Oct', revenue: 0 },
+      { date: 'Nov', revenue: 0 },
+      { date: 'Dec', revenue: 0 },
+    ],
+  });
+
   const [period, setPeriod] = useState('daily');
+  const [loading, setLoading] = useState(true);
+
+  const fetchDashboardData = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/dashboard`);
+      if (res.data) {
+        const data = res.data;
+
+        const formattedRecentOrders = (data.recent_orders || []).map((o) => ({
+          id: o.sale_id || o.id,
+          order_number: `${o.sale_id || o.id}`,
+          customer_name: o.customer_name || 'POS Customer',
+          total: Number(o.total_amount || 0),
+          currency: 'USD',
+          payment_status: o.payment_status ? o.payment_status.toLowerCase() : 'paid',
+          order_status: 'completed',
+        }));
+
+        setOverview({
+          today_orders: data.todays_orders ?? data.today_orders ?? 0,
+          today_revenue: Number(data.todays_revenue ?? data.today_revenue ?? 0),
+          total_products: data.total_products ?? 0,
+          total_customers: data.total_customers ?? 0,
+          total_revenue: Number(data.total_revenue ?? 0),
+          recent_orders: formattedRecentOrders,
+        });
+
+        const rawDaily = data.chart_data || data.chartData || [];
+        const rawWeekly = data.weekly_chart_data || [];
+        const rawMonthly = data.monthly_chart_data || [];
+
+        setSalesChart({
+          daily: Array.isArray(rawDaily) && rawDaily.length > 0
+            ? rawDaily.map((item) => ({ date: item.day || item.date, revenue: Number(item.revenue || 0) }))
+            : salesChart.daily,
+          weekly: Array.isArray(rawWeekly) && rawWeekly.length > 0
+            ? rawWeekly.map((item) => ({ date: item.date, revenue: Number(item.revenue || 0) }))
+            : salesChart.weekly,
+          monthly: Array.isArray(rawMonthly) && rawMonthly.length > 0
+            ? rawMonthly.map((item) => ({ date: item.date, revenue: Number(item.revenue || 0) }))
+            : salesChart.monthly,
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching dashboard data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  // 📊 ទាញយកទិន្នន័យ Chart ដោយផ្ទាល់តាម Period (Daily / Weekly / Monthly)
+  const currentChartData = salesChart[period] || [];
 
   const chartData = {
-    labels: (MOCK_SALES_DATA[period] || []).map((d) => d.date),
+    labels: currentChartData.map((d) => d.date),
     datasets: [
       {
         label: 'Revenue ($)',
-        data: (MOCK_SALES_DATA[period] || []).map((d) => d.revenue),
+        data: currentChartData.map((d) => d.revenue),
         borderColor: '#4f46e5',
-        backgroundColor: 'rgba(79,70,229,0.1)',
+        backgroundColor: 'rgba(79, 70, 229, 0.15)',
         fill: true,
-        tension: 0.4,
+        tension: 0.35,
+        pointBackgroundColor: '#4f46e5',
+        pointRadius: 4,
       },
     ],
   };
 
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: true },
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        ticks: {
+          callback: (value) => `$${value}`,
+        },
+      },
+    },
+  };
+
   return (
-    <div>
+    <div className="p-2">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Dashboard Overview</h1>
+        <h1 className="text-2xl font-bold text-gray-800">Dashboard Overview</h1>
         <button
-          onClick={() => alert('Demo Mode: Storefront preview unavailable.')}
-          className="bg-white border border-gray-300 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium"
+          onClick={() => alert('Storefront preview coming soon.')}
+          className="bg-white border border-gray-300 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition"
         >
           View my storefront ↗
         </button>
       </div>
 
+      {/* Metrics Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        <StatCard label="Today's Orders" value={overview.today_orders} icon={<FiShoppingBag />} color="bg-indigo-100 text-indigo-600" />
-        <StatCard label="Today's Revenue" value={`$${overview.today_revenue.toFixed(2)}`} icon={<FiDollarSign />} color="bg-emerald-100 text-emerald-600" />
-        <StatCard label="Total Products" value={overview.total_products} icon={<FiPackage />} color="bg-amber-100 text-amber-600" />
-        <StatCard label="Total Customers" value={overview.total_customers} icon={<FiUsers />} color="bg-rose-100 text-rose-600" />
-        <StatCard label="Total Revenue" value={`$${overview.total_revenue.toFixed(2)}`} icon={<FiBox />} color="bg-purple-100 text-purple-600" />
+        <StatCard
+          label="Today's Orders"
+          value={loading ? '...' : overview.today_orders}
+          icon={<FiShoppingBag />}
+          color="bg-indigo-100 text-indigo-600"
+        />
+        <StatCard
+          label="Today's Revenue"
+          value={loading ? '...' : `$${overview.today_revenue.toFixed(2)}`}
+          icon={<FiDollarSign />}
+          color="bg-emerald-100 text-emerald-600"
+        />
+        <StatCard
+          label="Total Products"
+          value={loading ? '...' : overview.total_products}
+          icon={<FiPackage />}
+          color="bg-amber-100 text-amber-600"
+        />
+        <StatCard
+          label="Total Customers"
+          value={loading ? '...' : overview.total_customers}
+          icon={<FiUsers />}
+          color="bg-rose-100 text-rose-600"
+        />
+        <StatCard
+          label="Total Revenue"
+          value={loading ? '...' : `$${overview.total_revenue.toFixed(2)}`}
+          icon={<FiBox />}
+          color="bg-purple-100 text-purple-600"
+        />
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm p-6 mt-6">
+      {/* Sales Chart */}
+      <div className="bg-white rounded-xl shadow-sm p-6 mt-6 border border-gray-100">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-bold">Sales Chart</h2>
+          <h2 className="font-bold text-gray-800">Sales Chart</h2>
           <div className="flex gap-2">
             {['daily', 'weekly', 'monthly'].map((p) => (
               <button
                 key={p}
                 onClick={() => setPeriod(p)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize ${period === p ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition ${
+                  period === p
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
               >
                 {p}
               </button>
@@ -137,18 +246,27 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="h-64">
-          <Line data={chartData} options={{ responsive: true, maintainAspectRatio: false }} />
+          <Line
+            key={`${period}-${JSON.stringify(chartData)}`}
+            redraw={true}
+            data={chartData}
+            options={chartOptions}
+          />
         </div>
       </div>
 
-      {/* Recent orders */}
-      <div className="bg-white rounded-xl shadow-sm mt-6 overflow-hidden">
+      {/* Recent Orders Table */}
+      <div className="bg-white rounded-xl shadow-sm mt-6 overflow-hidden border border-gray-100">
         <div className="p-5 border-b flex items-center justify-between">
-          <h2 className="font-bold">Recent Orders</h2>
-          <Link to="/orders" className="text-sm text-indigo-600 hover:underline">View all</Link>
+          <h2 className="font-bold text-gray-800">Recent Orders</h2>
+          <Link to="/pos" className="text-sm text-indigo-600 hover:underline font-semibold">
+            Go to POS ➔
+          </Link>
         </div>
         {overview.recent_orders.length === 0 ? (
-          <p className="text-center text-gray-400 py-8">No orders yet.</p>
+          <p className="text-center text-gray-400 py-8">
+            {loading ? 'Loading stats...' : 'No orders recorded.'}
+          </p>
         ) : (
           <table className="w-full text-sm">
             <thead>
@@ -162,17 +280,21 @@ export default function Dashboard() {
             </thead>
             <tbody className="divide-y">
               {overview.recent_orders.map((o) => (
-                <tr key={o.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-mono text-xs font-semibold">#{o.order_number}</td>
-                  <td className="px-4 py-3">{o.customer_name}</td>
-                  <td className="px-4 py-3 font-semibold">{o.total.toFixed(2)} {o.currency}</td>
+                <tr key={o.id} className="hover:bg-slate-50 transition">
+                  <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-800">
+                    #{o.order_number}
+                  </td>
+                  <td className="px-4 py-3 font-medium text-slate-700">{o.customer_name}</td>
+                  <td className="px-4 py-3 font-bold text-slate-800">
+                    ${o.total.toFixed(2)}
+                  </td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${o.payment_status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                    <span className="px-2 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">
                       {o.payment_status}
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-1 rounded-full text-xs font-semibold capitalize ${STATUS_COLORS[o.order_status] || STATUS_COLORS.pending}`}>
+                    <span className={`px-2 py-1 rounded-full text-xs font-semibold capitalize ${STATUS_COLORS[o.order_status] || STATUS_COLORS.completed}`}>
                       {o.order_status}
                     </span>
                   </td>

@@ -7,6 +7,7 @@ import {
   FiBox, 
   FiGrid, 
   FiBarChart2, 
+  FiTruck, // 👈 បន្ថែម Icon អ្នកផ្គត់ផ្គង់
   FiLogOut 
 } from 'react-icons/fi';
 
@@ -15,6 +16,7 @@ import POS from './components/POS';
 import Products from './components/products';
 import Categories from './components/categories';
 import Report from './components/report';
+import Suppliers from './components/suppliers'; // 👈 Import Component ថ្មី
 import Login from './components/login';
 import Logout from './components/logout';
 
@@ -35,7 +37,7 @@ function MainLayout({ user }) {
           </h1>
           {user && (
             <div className="mt-2 text-xs text-indigo-400">
-              👤 {user.full_name} ({user.role})
+              👤 {user?.full_name || user?.name || 'Admin'} ({user?.role || 'Admin'})
             </div>
           )}
         </div>
@@ -65,6 +67,12 @@ function MainLayout({ user }) {
             <FiBarChart2 size={18} />
             <span>Reports</span>
           </NavLink>
+
+          {/* 🚚 Menu ថ្មីនៅក្រោម Reports */}
+          <NavLink to="/suppliers" className={navLinkStyle}>
+            <FiTruck size={18} />
+            <span>Suppliers & Stock</span>
+          </NavLink>
         </nav>
 
         <div className="p-4 border-t border-slate-800">
@@ -83,15 +91,28 @@ function MainLayout({ user }) {
 }
 
 export default function App() {
-  const [user, setUser] = useState(null);
+  // 🔐 រក្សាសភាព Login ដោយទាញពី localStorage មិនឱ្យបាត់ពេល Refresh ទំព័រ
+  const [user, setUser] = useState(() => {
+    const savedUser = localStorage.getItem('pos_user');
+    return savedUser ? JSON.parse(savedUser) : null;
+  });
+
+  const handleSetUser = (userData) => {
+    setUser(userData);
+    if (userData) {
+      localStorage.setItem('pos_user', JSON.stringify(userData));
+    } else {
+      localStorage.removeItem('pos_user');
+    }
+  };
 
   return (
     <BrowserRouter>
       <Toaster position="top-right" />
 
       <Routes>
-        <Route path="/login" element={<Login setUser={setUser} />} />
-        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="/login" element={<Login setUser={handleSetUser} />} />
+        <Route path="/" element={<Navigate to={user ? "/dashboard" : "/login"} replace />} />
 
         <Route element={<MainLayout user={user} />}>
           <Route path="/dashboard" element={<Dashboard user={user} />} />
@@ -99,7 +120,8 @@ export default function App() {
           <Route path="/products" element={<Products user={user} />} />
           <Route path="/categories" element={<Categories user={user} />} />
           <Route path="/report" element={<Report user={user} />} />
-          <Route path="/logout" element={<Logout setUser={setUser} />} />
+          <Route path="/suppliers" element={<Suppliers user={user} />} /> {/* 👈 Route ថ្មី */}
+          <Route path="/logout" element={<Logout setUser={handleSetUser} />} />
         </Route>
       </Routes>
     </BrowserRouter>
