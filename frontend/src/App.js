@@ -7,7 +7,8 @@ import {
   FiBox, 
   FiGrid, 
   FiBarChart2, 
-  FiTruck, // 👈 បន្ថែម Icon អ្នកផ្គត់ផ្គង់
+  FiTruck, 
+  FiShield, // 👈 Icon សម្រាប់ការធានា
   FiLogOut 
 } from 'react-icons/fi';
 
@@ -16,7 +17,8 @@ import POS from './components/POS';
 import Products from './components/products';
 import Categories from './components/categories';
 import Report from './components/report';
-import Suppliers from './components/suppliers'; // 👈 Import Component ថ្មី
+import Suppliers from './components/suppliers';
+import Warranties from './components/Warranties'; // 👈 Import Component ការធានា
 import Login from './components/login';
 import Logout from './components/logout';
 
@@ -68,10 +70,15 @@ function MainLayout({ user }) {
             <span>Reports</span>
           </NavLink>
 
-          {/* 🚚 Menu ថ្មីនៅក្រោម Reports */}
           <NavLink to="/suppliers" className={navLinkStyle}>
             <FiTruck size={18} />
             <span>Suppliers & Stock</span>
+          </NavLink>
+
+          {/* 🛡️ Menu ថ្មីនៅក្រោម Suppliers & Stock */}
+          <NavLink to="/warranties" className={navLinkStyle}>
+            <FiShield size={18} />
+            <span>Warranties</span>
           </NavLink>
         </nav>
 
@@ -91,7 +98,6 @@ function MainLayout({ user }) {
 }
 
 export default function App() {
-  // 🔐 រក្សាសភាព Login ដោយទាញពី localStorage មិនឱ្យបាត់ពេល Refresh ទំព័រ
   const [user, setUser] = useState(() => {
     const savedUser = localStorage.getItem('pos_user');
     return savedUser ? JSON.parse(savedUser) : null;
@@ -120,7 +126,8 @@ export default function App() {
           <Route path="/products" element={<Products user={user} />} />
           <Route path="/categories" element={<Categories user={user} />} />
           <Route path="/report" element={<Report user={user} />} />
-          <Route path="/suppliers" element={<Suppliers user={user} />} /> {/* 👈 Route ថ្មី */}
+          <Route path="/suppliers" element={<Suppliers user={user} />} />
+          <Route path="/warranties" element={<Warranties user={user} />} /> {/* 👈 Route ថ្មី */}
           <Route path="/logout" element={<Logout setUser={handleSetUser} />} />
         </Route>
       </Routes>

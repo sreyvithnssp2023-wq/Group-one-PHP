@@ -3,7 +3,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import { FiDownload } from 'react-icons/fi';
 
-const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://127.0.0.1/phone-shop/Backend/public/api';
+const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://127.0.0.1:8000/api';
 
 export default function Reports() {
   const [period, setPeriod] = useState('daily');
@@ -13,7 +13,6 @@ export default function Reports() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('sales');
 
-  // 🔄 ទាញយកទិន្នន័យពិតប្រាកដពី Laravel API ជំនួសឱ្យ MOCK Data
   const fetchReportsData = async () => {
     setLoading(true);
     try {
@@ -26,8 +25,8 @@ export default function Reports() {
             orders: Number(res.data.total_orders || 0),
           },
           data: (res.data.sales_report || []).map((item) => ({
-            date: item.period,
-            orders: item.orders,
+            date: item.period || 'N/A',
+            orders: Number(item.orders || 0),
             revenue: Number(item.revenue || 0),
           })),
         });
@@ -35,8 +34,8 @@ export default function Reports() {
         // 2. Product Performance
         setProducts(
           (res.data.product_performance || []).map((item) => ({
-            name: item.product_name,
-            units: item.qty_sold,
+            name: item.product_name || 'N/A',
+            units: Number(item.qty_sold || 0),
             revenue: Number(item.revenue || 0),
           }))
         );
@@ -45,9 +44,9 @@ export default function Reports() {
         setCustomers(
           (res.data.customer_report || []).map((c, index) => ({
             id: index + 1,
-            name: c.customer_name,
+            name: c.customer_name || 'General Customer',
             phone: c.phone || 'N/A',
-            order_count: c.orders,
+            order_count: Number(c.orders || 0),
             total_spent: Number(c.total_spent || 0),
           }))
         );
@@ -66,7 +65,7 @@ export default function Reports() {
 
   const exportCsv = (rows, name) => {
     if (!rows || rows.length === 0) {
-      toast.error('Nothing to export');
+      toast.error('គ្មានទិន្នន័យសម្រាប់ Export ទេ!');
       return;
     }
     const header = Object.keys(rows[0]);
@@ -101,7 +100,8 @@ export default function Reports() {
   ];
 
   return (
-    <div>
+    <div className="p-4">
+      {/* Header Bar */}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Reports</h1>
         {tab === 'sales' && (
@@ -123,7 +123,7 @@ export default function Reports() {
             </div>
             <button
               onClick={() => exportCsv(sales?.data || [], 'sales_report')}
-              className="px-3 py-1.5 bg-white border hover:bg-gray-50 text-gray-700 rounded-lg text-sm font-semibold flex items-center gap-1"
+              className="px-3 py-1.5 bg-white border hover:bg-gray-50 text-gray-700 rounded-lg text-sm font-semibold flex items-center gap-1 shadow-sm"
             >
               <FiDownload /> CSV
             </button>
@@ -131,14 +131,15 @@ export default function Reports() {
         )}
       </div>
 
+      {/* Tabs Switcher */}
       <div className="flex gap-2 mb-6">
         {tabs.map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold ${
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
               tab === t.key
-                ? 'bg-indigo-600 text-white'
+                ? 'bg-indigo-600 text-white shadow-sm'
                 : 'bg-white text-gray-600 border hover:bg-gray-50'
             }`}
           >
@@ -147,20 +148,22 @@ export default function Reports() {
         ))}
       </div>
 
+      {/* Tab 1: Sales Report */}
       {tab === 'sales' && (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          <div className="p-5 border-b flex justify-between items-center">
-            <h2 className="font-bold capitalize">Sales — {period}</h2>
+        <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+          <div className="p-5 border-b flex justify-between items-center bg-slate-50/50">
+            <h2 className="font-bold capitalize text-slate-800">Sales — {period}</h2>
             <span className="text-sm text-gray-500">
-              <strong className="text-lg text-indigo-600">
-                ${sales?.totals?.revenue?.toFixed(2) || '0.00'}
+              Total Revenue: {' '}
+              <strong className="text-lg font-bold text-indigo-600">
+                ${(sales?.totals?.revenue || 0).toFixed(2)}
               </strong>{' '}
-              revenue · {sales?.totals?.orders || 0} orders
+              · {sales?.totals?.orders || 0} orders
             </span>
           </div>
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-slate-50 text-left text-xs uppercase text-gray-500">
+              <tr className="bg-slate-50 text-left text-xs uppercase text-gray-500 border-b">
                 <th className="px-4 py-3">Period</th>
                 <th className="px-4 py-3">Orders</th>
                 <th className="px-4 py-3">Revenue</th>
@@ -169,17 +172,17 @@ export default function Reports() {
             <tbody className="divide-y">
               {sales?.data?.length === 0 ? (
                 <tr>
-                  <td colSpan="3" className="text-center py-6 text-gray-400">
+                  <td colSpan="3" className="text-center py-8 text-gray-400">
                     No sales recorded for this period.
                   </td>
                 </tr>
               ) : (
                 sales?.data?.map((row, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 font-medium">{row.date}</td>
-                    <td className="px-4 py-3">{row.orders}</td>
+                  <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="px-4 py-3 font-medium text-slate-700">{row.date}</td>
+                    <td className="px-4 py-3 text-slate-600">{row.orders}</td>
                     <td className="px-4 py-3 font-semibold text-indigo-600">
-                      ${row.revenue.toFixed(2)}
+                      ${(row.revenue || 0).toFixed(2)}
                     </td>
                   </tr>
                 ))
@@ -189,20 +192,21 @@ export default function Reports() {
         </div>
       )}
 
+      {/* Tab 2: Product Performance */}
       {tab === 'products' && (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          <div className="p-5 border-b flex justify-between items-center">
-            <h2 className="font-bold">Product Performance</h2>
+        <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+          <div className="p-5 border-b flex justify-between items-center bg-slate-50/50">
+            <h2 className="font-bold text-slate-800">Product Performance</h2>
             <button
               onClick={() => exportCsv(products || [], 'product_report')}
-              className="px-3 py-1.5 bg-white border hover:bg-gray-50 text-gray-700 rounded-lg text-sm font-semibold flex items-center gap-1"
+              className="px-3 py-1.5 bg-white border hover:bg-gray-50 text-gray-700 rounded-lg text-sm font-semibold flex items-center gap-1 shadow-sm"
             >
               <FiDownload /> CSV
             </button>
           </div>
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-slate-50 text-left text-xs uppercase text-gray-500">
+              <tr className="bg-slate-50 text-left text-xs uppercase text-gray-500 border-b">
                 <th className="px-4 py-3">Product</th>
                 <th className="px-4 py-3">Units Sold</th>
                 <th className="px-4 py-3">Revenue</th>
@@ -211,17 +215,17 @@ export default function Reports() {
             <tbody className="divide-y">
               {products?.length === 0 ? (
                 <tr>
-                  <td colSpan="3" className="text-center py-6 text-gray-400">
+                  <td colSpan="3" className="text-center py-8 text-gray-400">
                     No product records found.
                   </td>
                 </tr>
               ) : (
                 products?.map((row, i) => (
-                  <tr key={i} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 font-medium">{row.name}</td>
-                    <td className="px-4 py-3">{row.units}</td>
+                  <tr key={i} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="px-4 py-3 font-medium text-slate-700">{row.name}</td>
+                    <td className="px-4 py-3 text-slate-600">{row.units}</td>
                     <td className="px-4 py-3 font-semibold text-indigo-600">
-                      ${row.revenue.toFixed(2)}
+                      ${(row.revenue || 0).toFixed(2)}
                     </td>
                   </tr>
                 ))
@@ -231,10 +235,11 @@ export default function Reports() {
         </div>
       )}
 
+      {/* Tab 3: Customer Report */}
       {tab === 'customers' && (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          <div className="p-5 border-b flex justify-between items-center">
-            <h2 className="font-bold">Customer Report</h2>
+        <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+          <div className="p-5 border-b flex justify-between items-center bg-slate-50/50">
+            <h2 className="font-bold text-slate-800">Customer Report</h2>
             <button
               onClick={() =>
                 exportCsv(
@@ -247,14 +252,14 @@ export default function Reports() {
                   'customer_report'
                 )
               }
-              className="px-3 py-1.5 bg-white border hover:bg-gray-50 text-gray-700 rounded-lg text-sm font-semibold flex items-center gap-1"
+              className="px-3 py-1.5 bg-white border hover:bg-gray-50 text-gray-700 rounded-lg text-sm font-semibold flex items-center gap-1 shadow-sm"
             >
               <FiDownload /> CSV
             </button>
           </div>
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-slate-50 text-left text-xs uppercase text-gray-500">
+              <tr className="bg-slate-50 text-left text-xs uppercase text-gray-500 border-b">
                 <th className="px-4 py-3">Customer</th>
                 <th className="px-4 py-3">Phone</th>
                 <th className="px-4 py-3">Orders</th>
@@ -264,18 +269,18 @@ export default function Reports() {
             <tbody className="divide-y">
               {customers?.length === 0 ? (
                 <tr>
-                  <td colSpan="4" className="text-center py-6 text-gray-400">
+                  <td colSpan="4" className="text-center py-8 text-gray-400">
                     No customer records found.
                   </td>
                 </tr>
               ) : (
                 customers?.map((c) => (
-                  <tr key={c.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 font-medium">{c.name}</td>
+                  <tr key={c.id} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="px-4 py-3 font-medium text-slate-700">{c.name}</td>
                     <td className="px-4 py-3 text-gray-500">{c.phone}</td>
-                    <td className="px-4 py-3">{c.order_count}</td>
+                    <td className="px-4 py-3 text-slate-600">{c.order_count}</td>
                     <td className="px-4 py-3 font-semibold text-indigo-600">
-                      ${c.total_spent.toFixed(2)}
+                      ${(c.total_spent || 0).toFixed(2)}
                     </td>
                   </tr>
                 ))

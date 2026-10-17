@@ -23,6 +23,9 @@ export default function PosSale() {
   const [loading, setLoading] = useState(false);
   const [failedImages, setFailedImages] = useState({});
 
+  // ⚙️ State សម្រាប់បើក/បិទ ផ្ទាំង Pop-up Modal KHQR Code
+  const [showQrModal, setShowQrModal] = useState(false);
+
   // ទាញយកបញ្ជីទំនិញពី Backend
   const fetchProducts = async () => {
     try {
@@ -142,6 +145,8 @@ export default function PosSale() {
       await axios.post(API_SALES, payload);
       alert(`ទូទាត់ប្រាក់ (${paymentMethod}) ជោគជ័យ!`);
 
+      // បិទ Modal និង reset ទិន្នន័យ
+      setShowQrModal(false);
       setCart([]);
       setCustomerName('');
       setCustomerPhone('');
@@ -160,7 +165,7 @@ export default function PosSale() {
   );
 
   return (
-    <div className="flex gap-6 p-6 min-h-screen bg-slate-50">
+    <div className="flex gap-6 p-6 min-h-screen bg-slate-50 relative">
       {/* ផ្នែកខាងឆ្វេង៖ បញ្ជីទំនិញ */}
       <div className="flex-1">
         <div className="flex items-center justify-between mb-4">
@@ -210,7 +215,6 @@ export default function PosSale() {
                     <img
                       src={imageUrl}
                       alt={name}
-                      /* ⚙️ បានកែប្រែត្រង់នេះ៖ ប្រើ object-contain p-2 ដើម្បីបង្ហាញរូបពេញមិនដាច់ */
                       className="w-full h-full object-contain p-2"
                       onError={() => {
                         setFailedImages((prev) => ({ ...prev, [pId]: true }));
@@ -291,6 +295,7 @@ export default function PosSale() {
           </div>
 
           <div className="space-y-2">
+            {/* ប៊ូតុងបង់ប្រាក់ផ្ទាល់ */}
             <button
               disabled={loading || cart.length === 0}
               onClick={() => handleCheckout('Cash')}
@@ -298,16 +303,76 @@ export default function PosSale() {
             >
               {loading ? 'Processing...' : 'បង់ប្រាក់ផ្ទាល់ (Cash)'}
             </button>
+
+            {/* ប៊ូតុង KHQR - ចុចទៅបើក Modal QR Code */}
             <button
-              disabled={loading || cart.length === 0}
-              onClick={() => handleCheckout('ABA KHQR')}
+              disabled={cart.length === 0}
+              onClick={() => {
+                if (cart.length === 0) {
+                  alert('សូមជ្រើសរើសទំនិញចូល Cart ជាមុនសិន!');
+                  return;
+                }
+                setShowQrModal(true);
+              }}
               className="w-full py-3 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-xl shadow transition disabled:opacity-50"
             >
-              {loading ? 'Processing...' : 'KHQR (ABA Pay)'}
+              KHQR (ABA Pay)
             </button>
           </div>
         </div>
       </div>
+
+      {/* ---------------- ផ្ទាំង Pop-up QR Code Modal ---------------- */}
+      {showQrModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl border border-slate-100 text-center relative animate-in fade-in zoom-in duration-150">
+            {/* ប៊ូតុង X សម្រាប់បិទ Modal */}
+            <button
+              onClick={() => setShowQrModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-100 transition"
+            >
+              ✕
+            </button>
+
+            <h3 className="text-lg font-bold text-slate-800 mb-1">ស្កែនដើម្បីបង់ប្រាក់</h3>
+            <p className="text-xs text-slate-400 mb-4">ABA KHQR / Bakong Pay</p>
+
+            {/* 👈 បានកែប្រែត្រង់នេះ៖ ប្រើប្រាស់រូប /QR.jpg */}
+            <div className="bg-red-50/50 p-4 rounded-2xl inline-block border border-red-100 mb-4">
+             <img
+              src={`${API_BASE.replace('/api', '')}/uploads/products/QR.jpg`}
+              alt="ABA KHQR Code"
+              className="w-56 h-auto mx-auto rounded-xl shadow-sm object-contain"
+            />
+            </div>
+
+            {/* បង្ហាញតម្លៃត្រូវបង់ */}
+            <div className="mb-6">
+              <span className="text-xs font-semibold text-slate-400 block">ទឹកប្រាក់សរុបត្រូវបង់</span>
+              <span className="text-3xl font-black text-indigo-600">${totalAmount.toFixed(2)}</span>
+            </div>
+
+            {/* ប៊ូតុងសកម្មភាព */}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setShowQrModal(false)}
+                className="w-1/2 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition"
+              >
+                បោះបង់
+              </button>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => handleCheckout('ABA KHQR')}
+                className="w-1/2 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition flex items-center justify-center gap-1.5 shadow-md shadow-indigo-200 disabled:opacity-50"
+              >
+                {loading ? 'Processing...' : '✓ បង់រួចរាល់'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

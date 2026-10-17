@@ -11,6 +11,7 @@ import {
   FiUser,
   FiTrash2,
   FiEdit3,
+  FiShield, // 👈 Import Icon ការធានា
 } from 'react-icons/fi';
 
 const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://127.0.0.1/phone-shop/Backend/public/api';
@@ -41,6 +42,7 @@ export default function Suppliers() {
     cost_price: '',
     price: '',
     stock: '',
+    warranty_months: '12', // 👈 បន្ថែមរយៈពេលធានា (Default 12 ខែ)
     description: '',
     image: null,
   });
@@ -141,6 +143,7 @@ export default function Suppliers() {
       formData.append('cost_price', productForm.cost_price || 0);
       formData.append('price', productForm.price);
       formData.append('stock', productForm.stock);
+      formData.append('warranty_months', productForm.warranty_months || 12); // 👈 បាញ់ទិន្នន័យរយៈពេលធានាទៅ Backend
       formData.append('description', productForm.description || '');
       if (productForm.image) {
         formData.append('image', productForm.image);
@@ -150,7 +153,7 @@ export default function Suppliers() {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
-      toast.success('🎉 បានបន្ថែមទំនិញថ្មីដោយជោគជ័យ!');
+      toast.success('🎉 បានបន្ថែមទំនិញ និងបង្កើតការធានាដោយជោគជ័យ!');
       setProductForm({
         name: '',
         sku: '',
@@ -159,6 +162,7 @@ export default function Suppliers() {
         cost_price: '',
         price: '',
         stock: '',
+        warranty_months: '12',
         description: '',
         image: null,
       });
@@ -427,7 +431,8 @@ export default function Suppliers() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {/* 🛡️ ប្រអប់បញ្ចូល តម្លៃ, ស្តុក, និង រយៈពេលធានា */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1">Cost Price ($)</label>
                 <input
@@ -461,6 +466,22 @@ export default function Suppliers() {
                   placeholder="e.g. 25"
                   value={productForm.stock}
                   onChange={(e) => setProductForm({ ...productForm, stock: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+
+              {/* 🛡️ Field ថ្មី ៖ រយៈពេលធានា (ខែ) */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1 flex items-center gap-1">
+                  <FiShield className="text-indigo-600" /> រយៈពេលធានា (គិតជាខែ) *
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  required
+                  placeholder="e.g. 12"
+                  value={productForm.warranty_months}
+                  onChange={(e) => setProductForm({ ...productForm, warranty_months: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500"
                 />
               </div>

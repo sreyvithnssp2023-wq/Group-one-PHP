@@ -92,9 +92,10 @@ export default function Dashboard() {
   const [period, setPeriod] = useState('daily');
   const [loading, setLoading] = useState(true);
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = async (selectedPeriod = period) => {
     try {
-      const res = await axios.get(`${API_BASE}/dashboard`);
+      setLoading(true);
+      const res = await axios.get(`${API_BASE}/dashboard?period=${selectedPeriod}`);
       if (res.data) {
         const data = res.data;
 
@@ -117,20 +118,24 @@ export default function Dashboard() {
           recent_orders: formattedRecentOrders,
         });
 
-        const rawDaily = data.chart_data || data.chartData || [];
-        const rawWeekly = data.weekly_chart_data || [];
-        const rawMonthly = data.monthly_chart_data || [];
+        // 🔄 ទាញយក Keys គ្រប់ទម្រង់ពី Backend
+        const rawDaily = data.daily || data.daily_chart || data.chart_data || data.chartData || [];
+        const rawWeekly = data.weekly || data.weekly_chart || data.weekly_chart_data || [];
+        const rawMonthly = data.monthly || data.monthly_chart || data.monthly_chart_data || [];
+
+        // Helper function សម្រាប់ចាប់យក ថ្ងៃ/ខែ និង ទឹកប្រាក់ឱ្យត្រូវ
+        const mapChartItems = (arr, fallbackArr) => {
+          if (!Array.isArray(arr) || arr.length === 0) return fallbackArr;
+          return arr.map((item) => ({
+            date: item.day || item.date || item.name || '',
+            revenue: Number(item.revenue ?? item.amount ?? item.sales ?? 0),
+          }));
+        };
 
         setSalesChart({
-          daily: Array.isArray(rawDaily) && rawDaily.length > 0
-            ? rawDaily.map((item) => ({ date: item.day || item.date, revenue: Number(item.revenue || 0) }))
-            : salesChart.daily,
-          weekly: Array.isArray(rawWeekly) && rawWeekly.length > 0
-            ? rawWeekly.map((item) => ({ date: item.date, revenue: Number(item.revenue || 0) }))
-            : salesChart.weekly,
-          monthly: Array.isArray(rawMonthly) && rawMonthly.length > 0
-            ? rawMonthly.map((item) => ({ date: item.date, revenue: Number(item.revenue || 0) }))
-            : salesChart.monthly,
+          daily: mapChartItems(rawDaily, salesChart.daily),
+          weekly: mapChartItems(rawWeekly, salesChart.weekly),
+          monthly: mapChartItems(rawMonthly, salesChart.monthly),
         });
       }
     } catch (err) {
@@ -141,8 +146,8 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    fetchDashboardData();
-  }, []);
+    fetchDashboardData(period);
+  }, [period]);
 
   // 📊 ទាញយកទិន្នន័យ Chart ដោយផ្ទាល់តាម Period (Daily / Weekly / Monthly)
   const currentChartData = salesChart[period] || [];
